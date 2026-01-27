@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossy Road Clone</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #222;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        h1 { margin-bottom: 10px; }
+        p { margin-top: 5px; color: #aaa; }
+
+        #game-container {
+            position: relative;
+            border: 4px solid #fff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            background-color: #87CEEB; /* Sky/Water base */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+
+        button {
+            background-color: #2ecc71;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin-top: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        button:hover { background-color: #27ae60; }
+    </style>
+</head>
+<body>
+
+    <h1>Crossy Road Clone</h1>
+    
+    <div id="game-container">
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        <div id="ui-layer">Score: <span id="score">0</span></div>
+        <div id="game-over">
+            <h2>Game Over!</h2>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <button onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+    <p>Use Arrow Keys to Move</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('final-score');
+        const gameOverEl = document.getElementById('game-over');
+
+        // Game Constants
+        const GRID_SIZE = 40;
+        const COLS = canvas.width / GRID_SIZE;
+        const ROWS = canvas.height / GRID_SIZE;
+
+        // Game State
+        let player = { x: 7, y: 9, color: '#f1c40f' }; // Starts at bottom center
+        let score = 0;
+        let isGameOver = false;
+        let speedMultiplier = 1;
+        
+        // Lane Types: 0 = Safe (Grass), 1 = Road (Cars), 2 = Water (Logs/Turtles - Simplified to "Lava" for this version)
+        // We will generate lanes dynamically
+        let lanes = [];
+
+        class Lane {
+            constructor(row, type, speed, direction) {
+                this.row = row;
+                this.type = type; // 'grass', 'road'
+                this.speed = speed;
+                this.direction = direction; // 1 = right, -1 = left
+                this.obstacles = [];
+                
+                if (type === 'road') {
+                    this.generateObstacles();
+                }
+            }
+
+            generateObstacles() {
+                // Randomly place 2-3 cars per lane
+                let count = Math.floor(Math.random() * 2) + 2;
+                for (let i = 0; i < count; i++) {
+                    this.obstacles.push({
+                        x: Math.random() * canvas.width,
+                        width: GRID_SIZE * (Math.random() < 0.5 ? 1.2 : 2), // Some cars are longer
+                        color: Math.random() < 0.5 ? '#e74c3c' : '#3498db'
+                    });
+                }
+            }
+
+            update() {
+                if (this.type === 'road') {
+                    this.obstacles.forEach(obs => {
+                        obs.x += this.speed * this.direction * speedMultiplier;
+                        
+                        // Wrap around screen
+                        if (this.direction === 1 && obs.x > canvas.width) {
+                            obs.x = -obs.width;
+                        } else if (this.direction === -1 && obs.x + obs.width < 0) {
+                            obs.x = canvas.width;
+                        }
+                    });
+                }
+            }
+
+            draw() {
+                // Draw Lane Background
+                if (this.type === 'grass') {
+                    ctx.fillStyle = '#2ecc71';
+                } else if (this.type === 'road') {
+                    ctx.fillStyle = '#34495e';
+                } else if (this.type === 'goal') {
+                    ctx.fillStyle = '#f39c12'; // Checkered flag area
+                }
+                ctx.fillRect(0, this.row * GRID_SIZE, canvas.width, GRID_SIZE);
+
+                // Draw Lane Markings for Road
+                if (this.type === 'road') {
+                    ctx.strokeStyle = '#fff';
+                    ctx.setLineDash([10, 10]);
+                    ctx.beginPath();
+                    ctx.moveTo(0, this.row * GRID_SIZE);
+                    ctx.lineTo(canvas.width, this.row * GRID_SIZE);
+                    ctx.stroke();
+                }
+
+                // Draw Obstacles
+                this.obstacles.forEach(obs => {
+                    ctx.fillStyle = obs.color;
+                    // Draw Car Body
+                    ctx.fillRect(obs.x, this.row * GRID_SIZE + 5, obs.width, GRID_SIZE - 10);
+                    // Draw Simple Wheels
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(obs.x + 5, this.row * GRID_SIZE + 2, 5, 3);
+                    ctx.fillRect(obs.x + obs.width - 10, this.row * GRID_SIZE + 2, 5, 3);
+                    ctx.fillRect(obs.x + 5, this.row * GRID_SIZE + GRID_SIZE - 5, 5, 3);
+                    ctx.fillRect(obs.x + obs.width - 10, this.row * GRID_SIZE + GRID_SIZE - 5, 5, 3);
+                });
+            }
+        }
+
+        function initLanes() {
+            lanes = [];
+            // Bottom lane is always safe grass
+            lanes.push(new Lane(9, 'grass', 0, 0));
+            
+            // Generate random lanes moving up
+            for (let r = 8; r > 0; r--) {
+                let type = Math.random() > 0.3 ? 'road' : 'grass';
+                let speed = (Math.random() * 2) + 1;
+                let dir = Math.random() > 0.5 ? 1 : -1;
+                lanes.push(new Lane(r, type, speed, dir));
+            }
+            
+            // Top lane is the goal
+            lanes.push(new Lane(0, 'goal', 0, 0));
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            // Draw Frog/Chicken body
+            let px = player.x * GRID_SIZE;
+            let py = player.y * GRID_SIZE;
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fillRect(px + 5, py + 30, 30, 10);
+
+            // Body
+            ctx.fillStyle = player.color;
+            ctx.fillRect(px + 5, py + 5, 30, 30);
+            
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.fillRect(px + 8, py + 8, 8, 8);
+            ctx.fillRect(px + 24, py + 8, 8, 8);
+            ctx.fillStyle = 'black';
+            ctx.fillRect(px + 10, py + 10, 4, 4);
+            ctx.fillRect(px + 26, py + 10, 4, 4);
+        }
+
+        function checkCollisions() {
+            // Find the lane the player is currently on
+            // Note: lanes are stored based on row index, need to find the matching one
+            let currentLane = lanes.find(l => l.row === player.y);
+
+            if (currentLane && currentLane.type === 'road') {
+                let px = player.x * GRID_SIZE + 5; // hitbox adjustment
+                let py = player.y * GRID_SIZE;
+                let pw = 30; // player width
+
+                for (let obs of currentLane.obstacles) {
+                    // Simple AABB Collision
+                    if (px < obs.x + obs.width &&
+                        px + pw > obs.x) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function resetGame() {
+            player = { x: Math.floor(COLS / 2), y: ROWS - 1, color: '#f1c40f' };
+            score = 0;
+            speedMultiplier = 1;
+            scoreEl.innerText = score;
+            isGameOver = false;
+            gameOverEl.style.display = 'none';
+            initLanes();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function winLevel() {
+            score += 100;
+            scoreEl.innerText = score;
+            speedMultiplier += 0.2; // Make it harder
+            // Reset player to bottom
+            player.y = ROWS - 1;
+            // Regenerate lanes for variety
+            initLanes();
+        }
+
+        function update() {
+            if (isGameOver) return;
+
+            lanes.forEach(lane => lane.update());
+
+            if (checkCollisions()) {
+                isGameOver = true;
+                finalScoreEl.innerText = score;
+                gameOverEl.style.display = 'block';
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw lanes (order matters)
+            lanes.forEach(lane => lane.draw());
+
+            drawPlayer();
+        }
+
+        function gameLoop() {
+            if (!isGameOver) {
+                update();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Input Handling
+        window.addEventListener('keydown', (e) => {
+            if (isGameOver) return;
+
+            switch(e.key) {
+                case 'ArrowUp':
+                    if (player.y > 0) {
+                        player.y--;
+                        score += 10;
+                        scoreEl.innerText = score;
+                        // Check win condition
+                        if (player.y === 0) winLevel();
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (player.y < ROWS - 1) player.y++;
+                    break;
+                case 'ArrowLeft':
+                    if (player.x > 0) player.x--;
+                    break;
+                case 'ArrowRight':
+                    if (player.x < COLS - 1) player.x++;
+                    break;
+            }
+        });
+
+        // Initialize
+        initLanes();
+        player.x = Math.floor(COLS / 2); // Center player
+        gameLoop();
+
+    </script>
+</body>
+</html>
