@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEOPHASE: Cyber-Parkour</title>
+    <title>NEOPHASE: TITAN</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
         body {
             margin: 0; padding: 0; overflow: hidden;
-            background-color: #020205;
+            background-color: #000;
             font-family: 'Orbitron', sans-serif;
             color: white; user-select: none;
         }
 
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        /* HUD */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; display: flex; flex-direction: column;
@@ -22,55 +25,128 @@
         }
 
         .hud-top {
-            display: flex; justify-content: space-between; padding: 20px;
-            font-size: 24px; text-shadow: 0 0 10px #ff0000;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            display: flex; justify-content: space-between; padding: 30px;
+            font-size: 20px; letter-spacing: 2px;
+            text-shadow: 0 0 10px currentColor;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
         }
+
+        #score-display { color: #fff; }
+        #speed-display { color: #00ffcc; }
 
         #mode-indicator {
-            position: absolute; bottom: 100px; left: 50%;
-            transform: translateX(-50%); padding: 10px 30px;
-            border: 2px solid white; border-radius: 4px;
-            font-weight: bold; font-size: 20px; transition: all 0.1s ease;
-            background: rgba(0,0,0,0.5);
-            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+            position: absolute; bottom: 120px; left: 50%;
+            transform: translateX(-50%); padding: 15px 40px;
+            border: 2px solid; border-radius: 2px;
+            font-weight: 900; font-size: 24px; letter-spacing: 4px;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: rgba(0,0,0,0.8);
+            clip-path: polygon(15% 0, 100% 0, 85% 100%, 0% 100%);
+            text-transform: uppercase;
         }
-        .mode-solid { border-color: #ff0044; color: #ff0044; box-shadow: 0 0 20px #ff0044; }
-        .mode-ethereal { border-color: #00ffff; color: #00ffff; box-shadow: 0 0 20px #00ffff; }
+        .mode-solid { 
+            border-color: #ff0044; color: #ff0044; 
+            box-shadow: 0 0 30px rgba(255, 0, 68, 0.4), inset 0 0 20px rgba(255, 0, 68, 0.2); 
+        }
+        .mode-ethereal { 
+            border-color: #00ffff; color: #00ffff; 
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 20px rgba(0, 255, 255, 0.2); 
+        }
 
+        /* MENUS */
         #start-screen, #game-over-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at center, #1a0000 0%, #000000 100%);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 20; pointer-events: auto; transition: opacity 0.5s;
+            z-index: 20; pointer-events: auto; overflow: hidden;
+            background: #020205;
+            transition: opacity 0.5s;
+        }
+
+        /* Neural Background Animation */
+        .neural-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, #1a0b1a 0%, #000 100%);
+            z-index: -1; opacity: 0.8;
+        }
+        .neural-node {
+            position: absolute; border-radius: 50%;
+            background: #ff0044; box-shadow: 0 0 10px #ff0044;
+            animation: floatNode 10s infinite ease-in-out;
+        }
+        @keyframes floatNode {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+            50% { transform: translate(20px, -20px) scale(1.5); opacity: 0.8; }
+        }
+
+        /* CRT Effect for Game Over */
+        .crt-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 2; pointer-events: none;
         }
 
         h1 {
-            font-size: 80px; margin: 0; color: #fff; text-transform: uppercase;
-            letter-spacing: 10px; text-shadow: 4px 4px 0px #ff0000;
-            animation: glitch 3s infinite alternate;
+            font-size: 100px; margin: 0; color: #fff; text-transform: uppercase;
+            letter-spacing: 15px; position: relative; z-index: 2;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+            mix-blend-mode: overlay;
         }
-        @keyframes glitch {
-            0% { transform: skew(0deg); } 2% { transform: skew(-2deg); }
-            4% { transform: skew(2deg); } 100% { transform: skew(0deg); }
+
+        .title-glitch {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 100px; color: #ff0044; letter-spacing: 15px;
+            opacity: 0.5; z-index: 1; mix-blend-mode: color-dodge;
+            animation: glitch-anim 2s infinite linear alternate-reverse;
+        }
+
+        @keyframes glitch-anim {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
         }
 
         .menu-box {
-            background: rgba(20, 0, 0, 0.5); backdrop-filter: blur(10px);
-            padding: 40px; border: 1px solid #ff0044;
-            box-shadow: 0 0 30px rgba(255, 0, 0, 0.2); text-align: center;
+            margin-top: 40px;
+            background: rgba(255, 255, 255, 0.03); 
+            backdrop-filter: blur(20px);
+            padding: 50px 80px; 
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #ff0044;
+            border-bottom: 4px solid #00ffff;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); 
+            text-align: center; z-index: 5;
+            position: relative;
         }
+
+        .menu-box::before {
+            content: ''; position: absolute; top: -10px; left: -10px;
+            width: 20px; height: 20px; border-top: 2px solid #fff; border-left: 2px solid #fff;
+        }
+        .menu-box::after {
+            content: ''; position: absolute; bottom: -10px; right: -10px;
+            width: 20px; height: 20px; border-bottom: 2px solid #fff; border-right: 2px solid #fff;
+        }
+
         .space-prompt {
-            margin-top: 30px; font-size: 18px; color: #fff;
-            animation: pulse 1s infinite alternate; font-weight: bold; letter-spacing: 2px;
+            margin-top: 40px; font-size: 20px; color: #fff;
+            animation: pulse 0.8s infinite alternate; 
+            font-weight: 900; letter-spacing: 4px;
+            background: #fff; color: #000; padding: 5px 15px;
         }
-        @keyframes pulse { 0% { opacity: 0.5; } 100% { opacity: 1; text-shadow: 0 0 10px #ff0044; } }
+        @keyframes pulse { 0% { opacity: 0.8; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1.02); box-shadow: 0 0 20px #fff; } }
+        
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
 <div id="game-container"></div>
+
 <div id="ui-layer">
     <div class="hud-top">
         <div id="score-display">SCORE: 0000</div>
@@ -80,21 +156,38 @@
 </div>
 
 <div id="start-screen">
-    <h1>NEOPHASE</h1>
-    <div style="font-size: 24px; color: #ff0044; letter-spacing: 8px; margin-bottom: 30px;">TITAN UPDATE</div>
+    <div class="neural-bg" id="neural-bg">
+        <!-- JS will populate nodes -->
+    </div>
+    
+    <div style="position:relative;">
+        <h1>NEOPHASE</h1>
+        <div class="title-glitch">NEOPHASE</div>
+    </div>
+    
+    <div style="font-size: 24px; color: #00ffff; letter-spacing: 10px; margin-bottom: 20px; text-shadow: 0 0 10px #00ffff;">
+        TITAN PROTOCOL
+    </div>
+    
     <div class="menu-box">
-        <p style="color:#aaa; font-size:14px; margin-bottom:20px;">
-            <span style="color:#ffaa00">3 ZONES:</span> Undercity, Street, Skyway.<br>
-            <span style="color:#00ffff">SPACE</span> to Jump/Flip. <span style="color:#ff0044">DOWN</span> to Shift.
+        <p style="color:#ddd; font-size:16px; margin-bottom:10px; line-height: 1.6;">
+            The city has evolved. Obstacles connect to the sky.<br>
+            <span style="color:#ff0044; font-weight:bold;">JUMPING IS FUTILE.</span> You must Phase.
+        </p>
+        <p style="font-size: 14px; color: #888;">
+            <span style="border: 1px solid #00ffff; color:#00ffff; padding: 2px 6px;">SPACE</span> JUMP &nbsp; 
+            <span style="border: 1px solid #ff0044; color:#ff0044; padding: 2px 6px;">DOWN</span> SHIFT
         </p>
         <div class="space-prompt">PRESS SPACE TO INITIALIZE</div>
     </div>
 </div>
 
 <div id="game-over-screen" class="hidden">
-    <h1 style="font-size: 50px; color: #ff0044;">SYSTEM FAILURE</h1>
-    <p style="font-size: 30px; color: white;">SCORE: <span id="final-score">0</span></p>
-    <div class="space-prompt">PRESS SPACE TO REBOOT</div>
+    <div class="crt-overlay"></div>
+    <h1 style="font-size: 80px; color: #ff0044; text-shadow: 0 0 30px red;">FATAL ERROR</h1>
+    <p style="font-size: 30px; color: white; letter-spacing: 5px;">SYNC LOST</p>
+    <p style="font-size: 40px; color: #00ffff; margin: 30px 0;">SCORE: <span id="final-score">0</span></p>
+    <div class="space-prompt" style="background: #ff0044; color: #fff;">PRESS SPACE TO REBOOT</div>
 </div>
 
 <script>
@@ -120,19 +213,15 @@
     };
 
     let scene, camera, renderer, gameActive=false, score=0, speed=CONF.speed, timeGlobal=0;
+    let particles = []; // For phase effect
 
     // --- Audio ---
     const AudioSys = {
         ctx: null,
         init: function() { 
-            try { 
-                window.AudioContext = window.AudioContext || window.webkitAudioContext; 
-                if(!this.ctx && window.AudioContext) this.ctx = new AudioContext(); 
-            } catch(e){} 
+            try { window.AudioContext = window.AudioContext || window.webkitAudioContext; if(!this.ctx && window.AudioContext) this.ctx = new AudioContext(); } catch(e){} 
         },
-        resume: function() { 
-            if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); 
-        },
+        resume: function() { if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
         playTone: function(freq, type, dur, vol=0.1) {
             if(!this.ctx) return;
             try {
@@ -148,6 +237,25 @@
         playShift: function(){ this.playTone(600,'sine',0.2,0.1); },
         playCrash: function(){ this.playTone(100,'sawtooth',0.5,0.3); }
     };
+
+    // --- Menu Background Gen ---
+    function initMenuBG() {
+        const container = document.getElementById('neural-bg');
+        for(let i=0; i<20; i++) {
+            const node = document.createElement('div');
+            node.className = 'neural-node';
+            const size = Math.random() * 10 + 5;
+            node.style.width = size + 'px';
+            node.style.height = size + 'px';
+            node.style.left = Math.random() * 100 + '%';
+            node.style.top = Math.random() * 100 + '%';
+            node.style.animationDuration = (Math.random() * 5 + 5) + 's';
+            node.style.backgroundColor = Math.random() > 0.5 ? '#ff0044' : '#00ffff';
+            node.style.boxShadow = `0 0 15px ${node.style.backgroundColor}`;
+            container.appendChild(node);
+        }
+    }
+    initMenuBG();
 
     // --- Asset Generation ---
     function createGlowTexture(color) {
@@ -167,6 +275,44 @@
         return tex;
     }
     const floorTex = createGlowTexture('#00ffcc');
+
+    // --- Particle System ---
+    class PhaseEffect {
+        constructor(position, color) {
+            this.mesh = new THREE.Group();
+            this.active = true;
+            this.life = 1.0;
+            
+            const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+
+            for(let i=0; i<20; i++) {
+                const p = new THREE.Mesh(geo, mat);
+                p.position.copy(position);
+                // Random velocity explosion
+                p.userData.vel = new THREE.Vector3(
+                    (Math.random()-0.5)*0.5,
+                    (Math.random()-0.5)*0.5,
+                    (Math.random()-0.5)*0.5
+                );
+                this.mesh.add(p);
+            }
+            scene.add(this.mesh);
+        }
+        update() {
+            this.life -= 0.05;
+            if(this.life <= 0) {
+                this.active = false;
+                scene.remove(this.mesh);
+                return;
+            }
+            this.mesh.children.forEach(p => {
+                p.position.add(p.userData.vel);
+                p.scale.setScalar(this.life);
+                p.rotation.x += 0.1;
+            });
+        }
+    }
 
     // --- World Management ---
     class ChunkManager {
@@ -206,7 +352,6 @@
                 const floor = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
                 floor.position.set(0, H_HIGH - 0.5, zStart - CONF.chunkLength/2);
                 chunk.mesh.add(floor);
-                // Support Pillars
                 const pillars = new THREE.Mesh(new THREE.BoxGeometry(12, H_HIGH, CONF.chunkLength), new THREE.MeshBasicMaterial({color:0x111111}));
                 pillars.position.set(0, H_HIGH/2 - 0.5, zStart - CONF.chunkLength/2);
                 chunk.mesh.add(pillars);
@@ -215,13 +360,11 @@
                 const floor = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
                 floor.position.set(0, H_SUB - 0.5, zStart - CONF.chunkLength/2);
                 chunk.mesh.add(floor);
-                // Roof
                 const ceil = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
                 ceil.position.set(0, H_BASE - 0.5, zStart - CONF.chunkLength/2);
                 chunk.mesh.add(ceil);
                 this.addWalls(chunk.mesh, H_SUB, zStart, 0x00aaff);
             }
-            // Ramps DOWN (Base -> Sub)
             else if (type === 'ramp_down_sub') {
                 const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
                 const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
@@ -231,11 +374,10 @@
                 chunk.mesh.add(ramp);
                 // Roof Ramp
                 const roofRamp = ramp.clone();
-                roofRamp.position.y += 6; // Parallel roof
+                roofRamp.position.y += 6; 
                 chunk.mesh.add(roofRamp);
                 this.addWalls(chunk.mesh, midY, zStart, 0xaa00ff, true);
             }
-            // Ramps UP (Sub -> Base)
             else if (type === 'ramp_up_base') {
                 const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
                 const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
@@ -243,13 +385,11 @@
                 ramp.position.set(0, midY - 0.5, zStart - CONF.chunkLength/2);
                 ramp.rotation.x = Math.atan(6 / CONF.chunkLength);
                 chunk.mesh.add(ramp);
-                // Roof Ramp
                 const roofRamp = ramp.clone();
                 roofRamp.position.y += 6;
                 chunk.mesh.add(roofRamp);
                 this.addWalls(chunk.mesh, midY, zStart, 0xaa00ff, true);
             }
-            // Ramp HIGH UP (Base -> High)
             else if (type === 'ramp_up_high') {
                 const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
                 const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
@@ -258,7 +398,6 @@
                 ramp.rotation.x = Math.atan(6 / CONF.chunkLength);
                 chunk.mesh.add(ramp);
             }
-            // Ramp HIGH DOWN (High -> Base)
             else if (type === 'ramp_down_base') {
                 const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
                 const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
@@ -272,11 +411,13 @@
             this.chunks.push(chunk);
             this.nextZ = zEnd;
 
-            // Obstacles
+            // Obstacles - REMOVED random ground clutter
+            // Only spawning major phase obstacles
             if(!type.includes('ramp')) {
                 const y = type === 'sub_level' ? H_SUB : (type === 'high_level' ? H_HIGH : H_BASE);
-                for(let i=0; i<2; i++) {
-                    world.spawnObstacle(zStart - Math.random()*CONF.chunkLength, Math.floor(Math.random()*3)-1, y);
+                // 1 in 3 chance for an obstacle row per chunk
+                if(Math.random() < 0.6) {
+                    world.spawnObstacle(zStart - CONF.chunkLength/2, Math.floor(Math.random()*3)-1, y);
                 }
             }
         }
@@ -308,20 +449,14 @@
             if (playerZ < this.nextZ + 100) {
                 const last = this.chunks[this.chunks.length-1].type;
                 let next = 'flat';
-                
-                // State Machine for Levels
                 const r = Math.random();
                 if(last === 'flat') {
                     if (r < 0.3) next = 'ramp_down_sub';
                     else if (r < 0.6) next = 'ramp_up_high';
                     else next = 'flat';
                 }
-                else if(last === 'sub_level') {
-                    next = r < 0.6 ? 'ramp_up_base' : 'sub_level';
-                }
-                else if(last === 'high_level') {
-                    next = r < 0.6 ? 'ramp_down_base' : 'high_level';
-                }
+                else if(last === 'sub_level') next = r < 0.6 ? 'ramp_up_base' : 'sub_level';
+                else if(last === 'high_level') next = r < 0.6 ? 'ramp_down_base' : 'high_level';
                 else if(last === 'ramp_down_sub') next = 'sub_level';
                 else if(last === 'ramp_up_base') next = 'flat';
                 else if(last === 'ramp_up_high') next = 'high_level';
@@ -342,7 +477,6 @@
                     if(c.type === 'flat') return CONF.floorHeight;
                     if(c.type === 'sub_level') return CONF.subLevelHeight;
                     if(c.type === 'high_level') return CONF.skyHeight;
-                    // Interpolate
                     if(c.type === 'ramp_down_sub') return CONF.floorHeight - (ratio * 6);
                     if(c.type === 'ramp_up_base') return CONF.subLevelHeight + (ratio * 6);
                     if(c.type === 'ramp_up_high') return CONF.floorHeight + (ratio * 6);
@@ -355,13 +489,13 @@
         getCeilingAt(z) {
             for(let c of this.chunks) {
                 if(z <= c.zStart && z >= c.zEnd) {
-                    if(c.type === 'sub_level') return CONF.floorHeight - 1; // 1 unit thickness
+                    if(c.type === 'sub_level') return CONF.floorHeight - 1; 
                     const ratio = (c.zStart - z) / CONF.chunkLength; 
                     if(c.type === 'ramp_down_sub') return (CONF.floorHeight - (ratio * 6)) + 6;
                     if(c.type === 'ramp_up_base') return (CONF.subLevelHeight + (ratio * 6)) + 6;
                 }
             }
-            return 999; // Open sky
+            return 999; 
         }
     }
 
@@ -382,24 +516,17 @@
 
             const box = new THREE.BoxGeometry(10, 50, 10);
             const bMat = new THREE.MeshBasicMaterial({ color: 0x000022 });
-            // Decoration
             const detailMat = new THREE.MeshBasicMaterial({color: 0x00ffff});
 
             for(let i=0; i<30; i++) {
                 const m = new THREE.Mesh(box, bMat);
-                
-                // Spawn logic: Move strictly out of center path (-50 to 50 is No Fly Zone)
                 let x = (Math.random() - 0.5) * 400;
                 if(Math.abs(x) < 50) x = x < 0 ? -60 - Math.random()*50 : 60 + Math.random()*50;
                 
                 m.position.set(x, -25, -50 - Math.random()*200);
                 m.scale.y = 1 + Math.random()*3;
-                
-                // Antenna/Detail
                 const ant = new THREE.Mesh(new THREE.BoxGeometry(0.5, 10, 0.5), detailMat);
-                ant.position.y = 25;
-                m.add(ant);
-
+                ant.position.y = 25; m.add(ant);
                 scene.add(m);
                 this.buildings.push(m);
             }
@@ -411,16 +538,16 @@
         }
     }
 
-    // --- Articulated Player ---
+    // --- Player ---
     class Player {
         constructor() {
             this.lane = 0; this.targetX = 0; this.isEthereal = false;
             this.vy = 0; this.jumpCount = 0; this.isJumping = false;
+            this.flipStyle = 0; // 0: Front, 1: Corkscrew, 2: Back
             
             this.container = new THREE.Group();
             this.container.position.y = 2; 
             scene.add(this.container);
-
             this.createModel();
         }
 
@@ -477,30 +604,36 @@
 
         update(dt) {
             this.container.position.x += (this.targetX - this.container.position.x) * 10 * dt;
-            
             const floorY = chunkManager.getHeightAt(this.container.position.z);
             const ceilingY = chunkManager.getCeilingAt(this.container.position.z);
             
             this.vy -= CONF.gravity;
             this.container.position.y += this.vy;
 
-            // Ceiling Collision
             if(this.container.position.y + 2.0 > ceilingY) {
                 this.container.position.y = ceilingY - 2.0;
-                this.vy = -0.1; // Bonk
+                this.vy = -0.1;
             }
 
-            // Floor Collision
             const legLen = 1.0; 
             if (this.container.position.y <= floorY + legLen) {
                 if (floorY > -20) {
                     this.container.position.y = floorY + legLen;
                     this.vy = 0; this.jumpCount = 0; this.isJumping = false;
-                    this.hips.rotation.x = 0; 
+                    this.hips.rotation.x = 0; this.hips.rotation.y = 0; this.hips.rotation.z = 0;
                 }
             } else {
                 this.isJumping = true;
-                if (this.jumpCount > 1) this.hips.rotation.x -= 0.15; 
+                if (this.jumpCount > 1) {
+                    // Complex Flip Animations
+                    if(this.flipStyle === 0) this.hips.rotation.x -= 0.15; // Front Tuck
+                    else if(this.flipStyle === 1) { // Corkscrew
+                        this.hips.rotation.x -= 0.1;
+                        this.hips.rotation.y -= 0.2;
+                    } else { // Back Layout
+                        this.hips.rotation.x += 0.1;
+                    }
+                }
             }
 
             if (!this.isJumping) {
@@ -535,9 +668,18 @@
         }
 
         move(d) { this.lane = Math.max(-1, Math.min(1, this.lane+d)); this.targetX = this.lane * CONF.laneWidth; }
-        jump() { if(this.jumpCount < 2) { this.vy = CONF.jumpForce; this.jumpCount++; AudioSys.playJump(); } }
+        jump() { 
+            if(this.jumpCount < 2) { 
+                this.vy = CONF.jumpForce; this.jumpCount++; 
+                this.flipStyle = Math.floor(Math.random() * 3);
+                AudioSys.playJump(); 
+            } 
+        }
         toggle() { 
             this.isEthereal = !this.isEthereal; AudioSys.playShift(); 
+            // Spawn Phase Effect
+            particles.push(new PhaseEffect(this.container.position, this.isEthereal ? 0x00ffff : 0xff0044));
+            
             const el = document.getElementById('mode-indicator');
             el.innerText = this.isEthereal ? "ETHEREAL" : "SOLID";
             el.className = this.isEthereal ? "mode-ethereal" : "mode-solid";
@@ -554,37 +696,28 @@
             grp.position.set(x, y, z);
             grp.userData = { type: 'none', active: true };
 
-            if(type < 0.3) { 
+            // Full Height Obstacles (Ceiling connected)
+            const CEIL_HEIGHT = 15; // Arbitrary high value to "connect" visuals
+
+            if(type < 0.5) { 
                 grp.userData.type = 'laser';
                 const mat = new THREE.MeshBasicMaterial({color: CONF.colors.laser});
-                for(let k=0; k<4; k++) {
+                // Tall Lasers
+                for(let k=0; k<8; k++) {
                     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,3.8), mat);
-                    b.rotation.z = Math.PI/2; b.position.y = 1 + k*0.6; grp.add(b);
+                    b.rotation.z = Math.PI/2; b.position.y = 1 + k*0.8; grp.add(b);
                 }
-                const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 0.2), new THREE.MeshStandardMaterial({color:0x333333}));
-                p.position.set(-1.9, 2, 0); grp.add(p);
-                const p2 = p.clone(); p2.position.set(1.9, 2, 0); grp.add(p2);
-            } else if (type < 0.6) { 
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, CEIL_HEIGHT, 0.2), new THREE.MeshStandardMaterial({color:0x333333}));
+                p.position.set(-1.9, CEIL_HEIGHT/2, 0); grp.add(p);
+                const p2 = p.clone(); p2.position.set(1.9, CEIL_HEIGHT/2, 0); grp.add(p2);
+            } else { 
                 grp.userData.type = 'glass';
                 const mat = new THREE.MeshPhysicalMaterial({color: 0xffffff, transmission: 0.9, thickness: 0.5});
-                const g = new THREE.Mesh(new THREE.BoxGeometry(3.5, 3, 0.2), mat);
-                g.position.y = 1.5; grp.add(g);
-                const f = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.1, 0.1), new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true}));
-                f.position.y = 1.5; grp.add(f);
-            } else if (type < 0.8) {
-                // Platform (Jumpable)
-                grp.userData.type = 'platform';
-                const mat = new THREE.MeshStandardMaterial({color: 0x555555});
-                const p = new THREE.Mesh(new THREE.BoxGeometry(3, 0.5, 3), mat);
-                p.position.y = 1.0;
-                grp.add(p);
-            } else {
-                // Data Cube (Jumpable)
-                grp.userData.type = 'cube';
-                const mat = new THREE.MeshBasicMaterial({color: 0x00ff00, wireframe:true});
-                const c = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
-                c.position.y = 0.5;
-                grp.add(c);
+                // Tall Glass
+                const g = new THREE.Mesh(new THREE.BoxGeometry(3.5, CEIL_HEIGHT, 0.2), mat);
+                g.position.y = CEIL_HEIGHT/2; grp.add(g);
+                const f = new THREE.Mesh(new THREE.BoxGeometry(3.6, CEIL_HEIGHT, 0.1), new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true}));
+                f.position.y = CEIL_HEIGHT/2; grp.add(f);
             }
             scene.add(grp);
             this.obstacles.push(grp);
@@ -669,22 +802,26 @@
             env.update(player.container.position.z);
             world.update(player.container.position.z);
 
+            // Update Particles
+            for(let i = particles.length-1; i>=0; i--) {
+                particles[i].update();
+                if(!particles[i].active) {
+                    particles.splice(i, 1);
+                }
+            }
+
             for(let o of world.obstacles) {
                 if(!o.userData.active) continue;
                 const dz = Math.abs(o.position.z - player.container.position.z);
                 const dx = Math.abs(o.position.x - player.container.position.x);
-                const dy = o.position.y - player.container.position.y;
-
+                // Simple infinite height check since obstacles connect to ceiling
                 if(dx < 1.0 && dz < 1.0) {
                     if(o.userData.type === 'glass') {
-                        if(player.isEthereal || dy > 2) gameOver();
+                        if(player.isEthereal) gameOver();
                         else { o.userData.active=false; o.visible=false; AudioSys.playCrash(); score+=50; }
                     } else if(o.userData.type === 'laser') {
-                        if(!player.isEthereal && dy < 2) gameOver();
+                        if(!player.isEthereal) gameOver();
                         else AudioSys.playShift();
-                    } else if (o.userData.type === 'platform' || o.userData.type === 'cube') {
-                        // Simple hop over check
-                        if(dy < 0.5) gameOver(); // Hit side
                     }
                 }
             }
