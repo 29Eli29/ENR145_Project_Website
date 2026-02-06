@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEOPHASE: TITAN</title>
+    <title>GLOWPHASE: TITAN</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
@@ -32,6 +32,7 @@
         }
 
         #score-display { color: #fff; }
+        #currency-display { color: #ffff00; text-shadow: 0 0 10px #ffff00; } 
         #speed-display { color: #00ffcc; }
 
         #mode-indicator {
@@ -45,12 +46,12 @@
             text-transform: uppercase;
         }
         .mode-solid { 
-            border-color: #ff0044; color: #ff0044; 
-            box-shadow: 0 0 30px rgba(255, 0, 68, 0.4), inset 0 0 20px rgba(255, 0, 68, 0.2); 
+            border-color: #00ffff; color: #00ffff; /* CYAN for Solid */
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 20px rgba(0, 255, 255, 0.2); 
         }
         .mode-ethereal { 
-            border-color: #00ffff; color: #00ffff; 
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), inset 0 0 20px rgba(0, 255, 255, 0.2); 
+            border-color: #ff0044; color: #ff0044; /* RED for Ethereal */
+            box-shadow: 0 0 30px rgba(255, 0, 68, 0.4), inset 0 0 20px rgba(255, 0, 68, 0.2); 
         }
 
         /* MENUS */
@@ -150,6 +151,7 @@
 <div id="ui-layer">
     <div class="hud-top">
         <div id="score-display">SCORE: 0000</div>
+        <div id="currency-display">GLOW: 0</div>
         <div id="speed-display">VELOCITY: 100%</div>
     </div>
     <div id="mode-indicator" class="mode-solid">SOLID FORM</div>
@@ -161,8 +163,8 @@
     </div>
     
     <div style="position:relative;">
-        <h1>NEOPHASE</h1>
-        <div class="title-glitch">NEOPHASE</div>
+        <h1>GLOWPHASE</h1>
+        <div class="title-glitch">GLOWPHASE</div>
     </div>
     
     <div style="font-size: 24px; color: #00ffff; letter-spacing: 10px; margin-bottom: 20px; text-shadow: 0 0 10px #00ffff;">
@@ -171,7 +173,7 @@
     
     <div class="menu-box">
         <p style="color:#ddd; font-size:16px; margin-bottom:10px; line-height: 1.6;">
-            The city has evolved. Obstacles connect to the sky.<br>
+            The city has evolved. Watch for Gaps.<br>
             <span style="color:#ff0044; font-weight:bold;">JUMPING IS FUTILE.</span> You must Phase.
         </p>
         <p style="font-size: 14px; color: #888;">
@@ -193,11 +195,11 @@
 <script>
     // --- Config ---
     const CONF = {
-        laneWidth: 4,
+        laneWidth: 6,
         chunkLength: 50,
         floorHeight: 0,
         subLevelHeight: -6,
-        skyHeight: 6,
+        skyHeight: 12,
         colors: {
             bg: 0x050011,
             armor: 0x111111,
@@ -205,15 +207,18 @@
             helmet: 0x220000,
             floor: 0x222222,
             vine: 0x00ffcc,
-            sky: 0x000033
+            sky: 0x000033,
+            laser: 0xff0044,
+            glowStick: 0xffff00
         },
-        speed: 0.55, 
-        gravity: 0.042,
-        jumpForce: 0.72 
+        speed: 0.65, 
+        gravity: 0.05,
+        jumpForce: 0.95 
     };
 
-    let scene, camera, renderer, gameActive=false, score=0, speed=CONF.speed, timeGlobal=0;
-    let particles = []; // For phase effect
+    let scene, camera, renderer, gameActive=false, score=0, currency=0, speed=CONF.speed, timeGlobal=0;
+    let particles = []; 
+    let speedLines = [];
 
     // --- Audio ---
     const AudioSys = {
@@ -233,8 +238,9 @@
                 o.start(); o.stop(this.ctx.currentTime+dur);
             } catch(e){}
         },
-        playJump: function(){ this.playTone(300,'triangle',0.2,0.1); },
-        playShift: function(){ this.playTone(600,'sine',0.2,0.1); },
+        playJump: function(){ this.playTone(400,'triangle',0.15,0.15); }, 
+        playShift: function(){ this.playTone(800,'sine',0.2,0.15); },
+        playCollect: function(){ this.playTone(1200, 'sine', 0.1, 0.1); this.playTone(1800, 'sine', 0.1, 0.1); },
         playCrash: function(){ this.playTone(100,'sawtooth',0.5,0.3); }
     };
 
@@ -261,22 +267,54 @@
     function createGlowTexture(color) {
         const c = document.createElement('canvas'); c.width=256; c.height=256;
         const ctx = c.getContext('2d');
-        ctx.fillStyle = '#111'; ctx.fillRect(0,0,256,256);
-        ctx.strokeStyle = color; ctx.lineWidth = 4;
-        ctx.shadowBlur = 15; ctx.shadowColor = color;
+        ctx.fillStyle = '#050505'; 
+        ctx.fillRect(0,0,256,256);
+        
+        ctx.strokeStyle = color; 
+        ctx.lineWidth = 6;
+        ctx.shadowBlur = 20; 
+        ctx.shadowColor = color;
+        
         ctx.beginPath();
-        for(let i=0; i<10; i++) {
+        for(let i=0; i<8; i++) {
             ctx.moveTo(Math.random()*256, 0); ctx.lineTo(Math.random()*256, 256);
         }
         ctx.stroke();
-        ctx.strokeRect(0,0,256,256);
+        ctx.strokeRect(0,0,256,256); 
+        
         const tex = new THREE.CanvasTexture(c);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
         return tex;
     }
     const floorTex = createGlowTexture('#00ffcc');
 
-    // --- Particle System ---
+    // --- Visual Effects ---
+    class SpeedLine {
+        constructor() {
+            const geometry = new THREE.BoxGeometry(0.1, 0.1, 10);
+            const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+            this.mesh = new THREE.Mesh(geometry, material);
+            this.reset();
+            scene.add(this.mesh);
+        }
+        reset() {
+            this.mesh.position.set(
+                (Math.random() - 0.5) * 40,
+                (Math.random() - 0.5) * 20 + 5,
+                player ? player.container.position.z - 50 : -50
+            );
+            this.speed = Math.random() * 2 + 1;
+        }
+        update(playerZ) {
+            this.mesh.position.z += this.speed; 
+            if (this.mesh.position.z > playerZ + 20) {
+                this.mesh.position.z = playerZ - 100 - Math.random() * 50;
+                this.mesh.position.x = (Math.random() - 0.5) * 40;
+                this.mesh.position.y = (Math.random() - 0.5) * 20 + 5;
+            }
+        }
+    }
+
     class PhaseEffect {
         constructor(position, color) {
             this.mesh = new THREE.Group();
@@ -289,11 +327,10 @@
             for(let i=0; i<20; i++) {
                 const p = new THREE.Mesh(geo, mat);
                 p.position.copy(position);
-                // Random velocity explosion
                 p.userData.vel = new THREE.Vector3(
-                    (Math.random()-0.5)*0.5,
-                    (Math.random()-0.5)*0.5,
-                    (Math.random()-0.5)*0.5
+                    (Math.random()-0.5)*0.8,
+                    (Math.random()-0.5)*0.8,
+                    (Math.random()-0.5)*0.8
                 );
                 this.mesh.add(p);
             }
@@ -325,7 +362,7 @@
             this.chunks.forEach(c => scene.remove(c.mesh));
             this.chunks = [];
             this.nextZ = 0;
-            for(let i=0; i<3; i++) this.addChunk('flat');
+            for(let i=0; i<4; i++) this.addChunk('flat');
         }
 
         addChunk(type) {
@@ -333,111 +370,224 @@
             const zEnd = this.nextZ - CONF.chunkLength;
             
             const chunk = { type: type, zStart: zStart, zEnd: zEnd, mesh: new THREE.Group() };
+            // Added emissive for better visibility of gaps
             const mat = new THREE.MeshStandardMaterial({ 
-                color: 0x444444, map: floorTex, roughness: 0.4, metalness: 0.8
+                color: 0x444444, 
+                map: floorTex, 
+                roughness: 0.4, 
+                metalness: 0.8,
+                emissive: 0x002222, // Low glow for better gap visibility
+                emissiveIntensity: 0.5
             });
 
-            // Level Constants
             const H_BASE = CONF.floorHeight;
             const H_SUB = CONF.subLevelHeight;
             const H_HIGH = CONF.skyHeight;
+            const WIDTH = CONF.laneWidth * 3 + 4; 
+
+            // GLITCH FIX: Use PlaneGeometry for floors to avoid corner protrusion clipping
+            const createFloor = (y, startZOffset=0, length=CONF.chunkLength) => {
+                // Main Surface (Plane)
+                const floorGeo = new THREE.PlaneGeometry(WIDTH, length);
+                const floor = new THREE.Mesh(floorGeo, mat);
+                floor.rotation.x = -Math.PI / 2; // Flat by default
+                floor.position.set(0, y, zStart - startZOffset - length/2);
+                chunk.mesh.add(floor);
+
+                // Underside Box (For visual thickness, offset down)
+                const underBox = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, length), new THREE.MeshBasicMaterial({color: 0x111111}));
+                underBox.position.set(0, y - 1.01, zStart - startZOffset - length/2); 
+                chunk.mesh.add(underBox);
+
+                return { mesh: floor, under: underBox };
+            }
+
+            const createCeiling = (y, startZOffset=0, length=CONF.chunkLength) => {
+                const ceilGeo = new THREE.PlaneGeometry(WIDTH, length);
+                const ceil = new THREE.Mesh(ceilGeo, mat);
+                ceil.rotation.x = Math.PI / 2; 
+                ceil.position.set(0, y, zStart - startZOffset - length/2);
+                chunk.mesh.add(ceil);
+                
+                const overBox = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, length), new THREE.MeshBasicMaterial({color: 0x111111}));
+                overBox.position.set(0, y + 1.01, zStart - startZOffset - length/2);
+                chunk.mesh.add(overBox);
+            }
+
+            // Height Differences
+            const D_SUB = Math.abs(H_BASE - H_SUB); 
+            const D_SKY = Math.abs(H_HIGH - H_BASE); 
 
             if (type === 'flat') {
-                const floor = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
-                floor.position.set(0, H_BASE - 0.5, zStart - CONF.chunkLength/2);
-                chunk.mesh.add(floor);
+                createFloor(H_BASE);
+                createCeiling(H_BASE + 22); // Height adjusted to 22 (Not too low, not too high)
                 this.addWalls(chunk.mesh, H_BASE, zStart, 0xff00cc);
             }
+            else if (type === 'gap_base') {
+                createFloor(H_BASE, 0, 15);
+                createFloor(H_BASE, 35, 15);
+                createCeiling(H_BASE + 22);
+                this.addWalls(chunk.mesh, H_BASE, zStart, 0xff0000);
+                
+                world.spawnCollectible(zStart - 25, 0, H_BASE + 4);
+                world.spawnCollectible(zStart - 25, -CONF.laneWidth, H_BASE + 6);
+                world.spawnCollectible(zStart - 25, CONF.laneWidth, H_BASE + 6);
+            }
             else if (type === 'high_level') {
-                const floor = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
-                floor.position.set(0, H_HIGH - 0.5, zStart - CONF.chunkLength/2);
-                chunk.mesh.add(floor);
-                const pillars = new THREE.Mesh(new THREE.BoxGeometry(12, H_HIGH, CONF.chunkLength), new THREE.MeshBasicMaterial({color:0x111111}));
-                pillars.position.set(0, H_HIGH/2 - 0.5, zStart - CONF.chunkLength/2);
-                chunk.mesh.add(pillars);
+                createFloor(H_HIGH);
+                createCeiling(H_HIGH + 22);
+                // No walls on high level for open feel
             }
             else if (type === 'sub_level') {
-                const floor = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
-                floor.position.set(0, H_SUB - 0.5, zStart - CONF.chunkLength/2);
-                chunk.mesh.add(floor);
-                const ceil = new THREE.Mesh(new THREE.BoxGeometry(14, 1, CONF.chunkLength), mat);
-                ceil.position.set(0, H_BASE - 0.5, zStart - CONF.chunkLength/2);
-                chunk.mesh.add(ceil);
+                createFloor(H_SUB);
+                createCeiling(H_SUB + 22);
                 this.addWalls(chunk.mesh, H_SUB, zStart, 0x00aaff);
             }
+            else if (type === 'gap_sub') {
+                 createFloor(H_SUB, 0, 15);
+                 createFloor(H_SUB, 35, 15);
+                 createCeiling(H_SUB + 22);
+                 this.addWalls(chunk.mesh, H_SUB, zStart, 0xff0000);
+                 world.spawnCollectible(zStart - 25, 0, H_SUB + 4);
+            }
+            // RAMP: DOWN to SUB
             else if (type === 'ramp_down_sub') {
-                const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
-                const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
+                const len = Math.sqrt(CONF.chunkLength**2 + D_SUB**2);
+                const angle = Math.atan(D_SUB / CONF.chunkLength);
+                
+                const floorGeo = new THREE.PlaneGeometry(WIDTH, len);
+                const ramp = new THREE.Mesh(floorGeo, mat);
                 const midY = (H_BASE + H_SUB) / 2;
-                ramp.position.set(0, midY - 0.5, zStart - CONF.chunkLength/2);
-                ramp.rotation.x = -Math.atan(6 / CONF.chunkLength); 
+                ramp.position.set(0, midY, zStart - CONF.chunkLength/2);
+                ramp.rotation.x = -Math.PI/2 - angle; 
                 chunk.mesh.add(ramp);
+
+                const thick = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, len), new THREE.MeshBasicMaterial({color:0x111111}));
+                thick.position.copy(ramp.position);
+                thick.rotation.x = ramp.rotation.x;
+                thick.translateY(-1.0);
+                chunk.mesh.add(thick);
+                
                 // Roof Ramp
-                const roofRamp = ramp.clone();
-                roofRamp.position.y += 6; 
+                const roofRamp = thick.clone();
+                roofRamp.position.y += 22; 
                 chunk.mesh.add(roofRamp);
+                
                 this.addWalls(chunk.mesh, midY, zStart, 0xaa00ff, true);
             }
+            // RAMP: UP from SUB
             else if (type === 'ramp_up_base') {
-                const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
-                const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
+                const len = Math.sqrt(CONF.chunkLength**2 + D_SUB**2);
+                const angle = Math.atan(D_SUB / CONF.chunkLength);
+                
+                const floorGeo = new THREE.PlaneGeometry(WIDTH, len);
+                const ramp = new THREE.Mesh(floorGeo, mat);
                 const midY = (H_BASE + H_SUB) / 2;
-                ramp.position.set(0, midY - 0.5, zStart - CONF.chunkLength/2);
-                ramp.rotation.x = Math.atan(6 / CONF.chunkLength);
+                ramp.position.set(0, midY, zStart - CONF.chunkLength/2);
+                ramp.rotation.x = -Math.PI/2 + angle;
                 chunk.mesh.add(ramp);
+
+                const thick = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, len), new THREE.MeshBasicMaterial({color:0x111111}));
+                thick.position.copy(ramp.position);
+                thick.rotation.x = ramp.rotation.x;
+                thick.translateY(-1.0);
+                chunk.mesh.add(thick);
+                
                 const roofRamp = ramp.clone();
-                roofRamp.position.y += 6;
+                roofRamp.position.y += 22;
                 chunk.mesh.add(roofRamp);
+                
                 this.addWalls(chunk.mesh, midY, zStart, 0xaa00ff, true);
             }
+            // RAMP: UP to SKY
             else if (type === 'ramp_up_high') {
-                const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
-                const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
+                const len = Math.sqrt(CONF.chunkLength**2 + D_SKY**2);
+                const angle = Math.atan(D_SKY / CONF.chunkLength);
+                
+                const floorGeo = new THREE.PlaneGeometry(WIDTH, len);
+                const ramp = new THREE.Mesh(floorGeo, mat);
                 const midY = (H_BASE + H_HIGH) / 2;
-                ramp.position.set(0, midY - 0.5, zStart - CONF.chunkLength/2);
-                ramp.rotation.x = Math.atan(6 / CONF.chunkLength);
+                ramp.position.set(0, midY, zStart - CONF.chunkLength/2);
+                ramp.rotation.x = -Math.PI/2 + angle;
                 chunk.mesh.add(ramp);
+
+                const thick = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, len), new THREE.MeshBasicMaterial({color:0x111111}));
+                thick.position.copy(ramp.position);
+                thick.rotation.x = ramp.rotation.x;
+                thick.translateY(-1.0);
+                chunk.mesh.add(thick);
+                
+                const roofRamp = ramp.clone();
+                roofRamp.position.y += 22;
+                chunk.mesh.add(roofRamp);
             }
+            // RAMP: DOWN from SKY
             else if (type === 'ramp_down_base') {
-                const len = Math.sqrt(CONF.chunkLength**2 + 6**2);
-                const ramp = new THREE.Mesh(new THREE.BoxGeometry(14, 1, len), mat);
+                const len = Math.sqrt(CONF.chunkLength**2 + D_SKY**2);
+                const angle = Math.atan(D_SKY / CONF.chunkLength);
+                
+                const floorGeo = new THREE.PlaneGeometry(WIDTH, len);
+                const ramp = new THREE.Mesh(floorGeo, mat);
                 const midY = (H_BASE + H_HIGH) / 2;
-                ramp.position.set(0, midY - 0.5, zStart - CONF.chunkLength/2);
-                ramp.rotation.x = -Math.atan(6 / CONF.chunkLength);
+                ramp.position.set(0, midY, zStart - CONF.chunkLength/2);
+                ramp.rotation.x = -Math.PI/2 - angle;
                 chunk.mesh.add(ramp);
+
+                const thick = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, 2, len), new THREE.MeshBasicMaterial({color:0x111111}));
+                thick.position.copy(ramp.position);
+                thick.rotation.x = ramp.rotation.x;
+                thick.translateY(-1.0);
+                chunk.mesh.add(thick);
+                
+                const roofRamp = ramp.clone();
+                roofRamp.position.y += 22;
+                chunk.mesh.add(roofRamp);
             }
 
             scene.add(chunk.mesh);
             this.chunks.push(chunk);
             this.nextZ = zEnd;
 
-            // Obstacles - REMOVED random ground clutter
-            // Only spawning major phase obstacles
-            if(!type.includes('ramp')) {
+            // Spawn Obstacles / Collectibles
+            if(!type.includes('ramp') && !type.includes('gap')) {
                 const y = type === 'sub_level' ? H_SUB : (type === 'high_level' ? H_HIGH : H_BASE);
-                // 1 in 3 chance for an obstacle row per chunk
-                if(Math.random() < 0.6) {
-                    world.spawnObstacle(zStart - CONF.chunkLength/2, Math.floor(Math.random()*3)-1, y);
+                
+                if(Math.random() < 0.4) {
+                    world.spawnCollectible(zStart - 10, 0, y + 5);
+                    world.spawnCollectible(zStart - 25, CONF.laneWidth, y + 6);
+                    world.spawnCollectible(zStart - 40, -CONF.laneWidth, y + 6);
+                }
+
+                const baseChance = 0.7;
+                if(Math.random() < baseChance) {
+                    [-1, 0, 1].forEach(lane => {
+                        if(Math.random() < 0.6) {
+                             world.spawnObstacle(zStart - CONF.chunkLength/2, lane, y);
+                        }
+                    });
                 }
             }
         }
 
         addWalls(group, yLevel, zStart, color, isRamp=false) {
-            const wallGeo = new THREE.BoxGeometry(1, 10, CONF.chunkLength);
+            // RESTORED WALLS
+            const wallGeo = new THREE.BoxGeometry(1, 15, CONF.chunkLength);
             const wallMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-            const stickGeo = new THREE.BoxGeometry(0.2, 4, 0.2);
+            const stickGeo = new THREE.BoxGeometry(0.5, 8, 0.5);
             const stickMat = new THREE.MeshBasicMaterial({ color: color });
+            const dist = CONF.laneWidth * 1.5 + 3;
 
-            [-8, 8].forEach(x => {
+            [-dist, dist].forEach(x => {
                 const wall = new THREE.Mesh(wallGeo, wallMat);
-                wall.position.set(x, yLevel + 4, zStart - CONF.chunkLength/2);
+                wall.position.set(x, yLevel + 6, zStart - CONF.chunkLength/2);
                 if(isRamp) wall.rotation.x = group.children[0].rotation.x;
                 group.add(wall);
+                
                 for(let k=0; k<3; k++) {
                     const stick = new THREE.Mesh(stickGeo, stickMat);
-                    stick.position.set(x > 0 ? x-0.6 : x+0.6, yLevel + 2 + Math.random(), zStart - 10 - k*15);
+                    stick.position.set(x > 0 ? x-0.6 : x+0.6, yLevel + 4 + Math.random(), zStart - 10 - k*15);
                     group.add(stick);
-                    const pl = new THREE.PointLight(color, 0.5, 8);
+                    const pl = new THREE.PointLight(color, 0.5, 10);
                     pl.position.copy(stick.position);
                     group.add(pl);
                 }
@@ -450,13 +600,23 @@
                 const last = this.chunks[this.chunks.length-1].type;
                 let next = 'flat';
                 const r = Math.random();
+                
                 if(last === 'flat') {
-                    if (r < 0.3) next = 'ramp_down_sub';
-                    else if (r < 0.6) next = 'ramp_up_high';
+                    if (r < 0.2) next = 'ramp_down_sub';
+                    else if (r < 0.4) next = 'ramp_up_high';
+                    else if (r < 0.6) next = 'gap_base'; 
                     else next = 'flat';
                 }
-                else if(last === 'sub_level') next = r < 0.6 ? 'ramp_up_base' : 'sub_level';
-                else if(last === 'high_level') next = r < 0.6 ? 'ramp_down_base' : 'high_level';
+                else if(last === 'sub_level') {
+                     if(r < 0.3) next = 'ramp_up_base';
+                     else if (r < 0.5) next = 'gap_sub';
+                     else next = 'sub_level';
+                }
+                else if(last === 'high_level') next = r < 0.5 ? 'ramp_down_base' : 'high_level';
+                
+                else if(last === 'gap_base') next = 'flat';
+                else if(last === 'gap_sub') next = 'sub_level';
+
                 else if(last === 'ramp_down_sub') next = 'sub_level';
                 else if(last === 'ramp_up_base') next = 'flat';
                 else if(last === 'ramp_up_high') next = 'high_level';
@@ -471,28 +631,46 @@
         }
 
         getHeightAt(z) {
+            const D_SUB = Math.abs(CONF.floorHeight - CONF.subLevelHeight);
+            const D_SKY = Math.abs(CONF.skyHeight - CONF.floorHeight);
+
             for(let c of this.chunks) {
                 if(z <= c.zStart && z >= c.zEnd) {
+                    if (c.type === 'gap_base' || c.type === 'gap_sub') {
+                        const relZ = c.zStart - z; 
+                        if (relZ > 15 && relZ < 35) return -100; // THE PIT
+                    }
+
                     const ratio = (c.zStart - z) / CONF.chunkLength; 
-                    if(c.type === 'flat') return CONF.floorHeight;
-                    if(c.type === 'sub_level') return CONF.subLevelHeight;
+                    
+                    if(c.type.includes('flat') || c.type === 'gap_base') return CONF.floorHeight;
+                    if(c.type.includes('sub') || c.type === 'gap_sub') return CONF.subLevelHeight;
                     if(c.type === 'high_level') return CONF.skyHeight;
-                    if(c.type === 'ramp_down_sub') return CONF.floorHeight - (ratio * 6);
-                    if(c.type === 'ramp_up_base') return CONF.subLevelHeight + (ratio * 6);
-                    if(c.type === 'ramp_up_high') return CONF.floorHeight + (ratio * 6);
-                    if(c.type === 'ramp_down_base') return CONF.skyHeight - (ratio * 6);
+                    
+                    if(c.type === 'ramp_down_sub') return CONF.floorHeight - (ratio * D_SUB);
+                    if(c.type === 'ramp_up_base') return CONF.subLevelHeight + (ratio * D_SUB);
+                    if(c.type === 'ramp_up_high') return CONF.floorHeight + (ratio * D_SKY);
+                    if(c.type === 'ramp_down_base') return CONF.skyHeight - (ratio * D_SKY);
                 }
             }
             return -100;
         }
 
         getCeilingAt(z) {
+            const D_SUB = Math.abs(CONF.floorHeight - CONF.subLevelHeight);
+            const D_SKY = Math.abs(CONF.skyHeight - CONF.floorHeight);
             for(let c of this.chunks) {
                 if(z <= c.zStart && z >= c.zEnd) {
-                    if(c.type === 'sub_level') return CONF.floorHeight - 1; 
                     const ratio = (c.zStart - z) / CONF.chunkLength; 
-                    if(c.type === 'ramp_down_sub') return (CONF.floorHeight - (ratio * 6)) + 6;
-                    if(c.type === 'ramp_up_base') return (CONF.subLevelHeight + (ratio * 6)) + 6;
+                    
+                    if(c.type.includes('flat') || c.type === 'gap_base') return CONF.floorHeight + 22;
+                    if(c.type.includes('sub') || c.type === 'gap_sub') return CONF.subLevelHeight + 22;
+                    if(c.type === 'high_level') return CONF.skyHeight + 22;
+
+                    if(c.type === 'ramp_down_sub') return (CONF.floorHeight - (ratio * D_SUB)) + 22;
+                    if(c.type === 'ramp_up_base') return (CONF.subLevelHeight + (ratio * D_SUB)) + 22;
+                    if(c.type === 'ramp_up_high') return (CONF.floorHeight + (ratio * D_SKY)) + 22;
+                    if(c.type === 'ramp_down_base') return (CONF.skyHeight - (ratio * D_SKY)) + 22;
                 }
             }
             return 999; 
@@ -503,7 +681,7 @@
     class Environment {
         constructor() {
             this.buildings = [];
-            const geo = new THREE.CylinderGeometry(100, 100, 200, 32, 1, true);
+            const geo = new THREE.CylinderGeometry(150, 150, 300, 32, 1, true);
             const mat = new THREE.ShaderMaterial({
                 uniforms: { time: {value:0} },
                 vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -518,7 +696,7 @@
             const bMat = new THREE.MeshBasicMaterial({ color: 0x000022 });
             const detailMat = new THREE.MeshBasicMaterial({color: 0x00ffff});
 
-            for(let i=0; i<30; i++) {
+            for(let i=0; i<40; i++) {
                 const m = new THREE.Mesh(box, bMat);
                 let x = (Math.random() - 0.5) * 400;
                 if(Math.abs(x) < 50) x = x < 0 ? -60 - Math.random()*50 : 60 + Math.random()*50;
@@ -543,18 +721,36 @@
         constructor() {
             this.lane = 0; this.targetX = 0; this.isEthereal = false;
             this.vy = 0; this.jumpCount = 0; this.isJumping = false;
-            this.flipStyle = 0; // 0: Front, 1: Corkscrew, 2: Back
+            this.flipType = 'front'; 
             
             this.container = new THREE.Group();
             this.container.position.y = 2; 
             scene.add(this.container);
+            
+            this.materials = {}; // Store materials to change color
             this.createModel();
+
+            // Headlight
+            this.light = new THREE.SpotLight(0xffffff, 1.5, 60, 0.5, 0.5, 1);
+            this.light.position.set(0, 5, 2);
+            
+            const targetObject = new THREE.Object3D();
+            targetObject.position.set(0, -5, -10);
+            this.light.target = targetObject;
+            
+            this.container.add(this.light);
+            this.container.add(targetObject);
+            
+            this.updateAppearance();
         }
 
         createModel() {
-            const matArmor = new THREE.MeshStandardMaterial({ color: CONF.colors.armor, roughness: 0.3, metalness: 0.8 });
-            const matGlow = new THREE.MeshBasicMaterial({ color: CONF.colors.armorGlow });
-            const helmetMat = new THREE.MeshStandardMaterial({ color: CONF.colors.helmet, roughness: 0.2, metalness: 1.0 });
+            // Colors will be updated dynamically
+            this.materials.armor = new THREE.MeshStandardMaterial({ color: CONF.colors.armor, roughness: 0.3, metalness: 0.8 });
+            this.materials.glow = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // Default Cyan (Solid)
+            
+            const matArmor = this.materials.armor;
+            const matGlow = this.materials.glow;
 
             this.hips = new THREE.Group();
             this.container.add(this.hips);
@@ -602,13 +798,37 @@
             this.R_Forearm = createLimb(0.12, 0.4, 0.12); this.R_Forearm.position.y = -0.4; this.R_Arm.add(this.R_Forearm);
         }
 
+        updateAppearance() {
+            if (this.isEthereal) {
+                // Ethereal: Red Glow, Transparent
+                this.materials.glow.color.setHex(0xff0044);
+                this.materials.armor.transparent = true;
+                this.materials.armor.opacity = 0.4;
+                this.materials.armor.emissive.setHex(0x330000);
+            } else {
+                // Solid: Cyan Glow, Solid
+                this.materials.glow.color.setHex(0x00ffff);
+                this.materials.armor.transparent = false;
+                this.materials.armor.opacity = 1.0;
+                this.materials.armor.emissive.setHex(0x001111);
+            }
+        }
+
         update(dt) {
-            this.container.position.x += (this.targetX - this.container.position.x) * 10 * dt;
+            // Snappier Lane Switch
+            this.container.position.x += (this.targetX - this.container.position.x) * 15 * dt;
+            
             const floorY = chunkManager.getHeightAt(this.container.position.z);
             const ceilingY = chunkManager.getCeilingAt(this.container.position.z);
             
             this.vy -= CONF.gravity;
             this.container.position.y += this.vy;
+
+            this.light.target.position.set(0, -5, -10);
+
+            if (this.container.position.y < -20) {
+                gameOver();
+            }
 
             if(this.container.position.y + 2.0 > ceilingY) {
                 this.container.position.y = ceilingY - 2.0;
@@ -619,67 +839,69 @@
             if (this.container.position.y <= floorY + legLen) {
                 if (floorY > -20) {
                     this.container.position.y = floorY + legLen;
-                    this.vy = 0; this.jumpCount = 0; this.isJumping = false;
-                    this.hips.rotation.x = 0; this.hips.rotation.y = 0; this.hips.rotation.z = 0;
+                    this.vy = 0; 
+                    this.jumpCount = 0; 
+                    this.isJumping = false;
+                    this.hips.rotation.x = 0; 
+                    this.hips.rotation.y = 0; 
+                    this.hips.rotation.z = 0;
+                    this.container.rotation.x = 0;
                 }
             } else {
                 this.isJumping = true;
-                if (this.jumpCount > 1) {
-                    // Complex Flip Animations
-                    if(this.flipStyle === 0) this.hips.rotation.x -= 0.15; // Front Tuck
-                    else if(this.flipStyle === 1) { // Corkscrew
-                        this.hips.rotation.x -= 0.1;
-                        this.hips.rotation.y -= 0.2;
-                    } else { // Back Layout
-                        this.hips.rotation.x += 0.1;
+                if (this.jumpCount > 0) {
+                    const flipSpeed = 0.25;
+                    if(this.flipType === 'front') {
+                        this.hips.rotation.x -= flipSpeed;
+                        this.L_Thigh.rotation.x = 1.5; this.R_Thigh.rotation.x = 1.5;
+                        this.L_Shin.rotation.x = 2.0; this.R_Shin.rotation.x = 2.0;
+                    } else if (this.flipType === 'side') {
+                         this.hips.rotation.z -= flipSpeed;
+                         this.L_Thigh.rotation.x = 1.0; this.R_Thigh.rotation.x = 0.5;
+                         this.L_Shin.rotation.x = 1.5; this.R_Shin.rotation.x = 1.5;
+                         this.hips.rotation.x = 0.5;
                     }
                 }
             }
 
+            // Running Animation
             if (!this.isJumping) {
-                const runSpeed = 15;
+                const runSpeed = 18;
                 const t = timeGlobal * runSpeed;
-                this.hips.position.y = Math.sin(t*2) * 0.05; 
-                this.torso.rotation.y = Math.cos(t) * 0.1; 
-                this.L_Thigh.rotation.x = Math.sin(t) * 0.8;
-                this.L_Shin.rotation.x = 0.2 + Math.max(0, Math.sin(t + 0.5)) * 1.5;
-                this.R_Thigh.rotation.x = Math.sin(t + Math.PI) * 0.8;
-                this.R_Shin.rotation.x = 0.2 + Math.max(0, Math.sin(t + Math.PI + 0.5)) * 1.5;
-                this.L_Arm.rotation.x = Math.sin(t + Math.PI) * 0.7; 
+                this.hips.position.y = Math.abs(Math.sin(t)) * 0.1;
+                this.hips.rotation.x = 0.2; 
+                this.torso.rotation.y = Math.cos(t) * 0.2; 
+                this.torso.rotation.z = Math.cos(t) * 0.05;
+                this.L_Thigh.rotation.x = Math.sin(t) * 1.0;
+                this.L_Shin.rotation.x = 0.2 + Math.max(0, Math.sin(t + 0.5)) * 1.8;
+                this.R_Thigh.rotation.x = Math.sin(t + Math.PI) * 1.0;
+                this.R_Shin.rotation.x = 0.2 + Math.max(0, Math.sin(t + Math.PI + 0.5)) * 1.8;
+                this.L_Arm.rotation.x = Math.sin(t + Math.PI) * 0.9; 
                 this.L_Arm.rotation.z = 0.1; 
-                this.L_Forearm.rotation.x = -0.5 - Math.abs(Math.sin(t)) * 0.2; 
-                this.R_Arm.rotation.x = Math.sin(t) * 0.7;
+                this.L_Forearm.rotation.x = -1.0 - Math.abs(Math.sin(t)) * 0.5;
+                this.R_Arm.rotation.x = Math.sin(t) * 0.9;
                 this.R_Arm.rotation.z = -0.1;
-                this.R_Forearm.rotation.x = -0.5 - Math.abs(Math.sin(t + Math.PI)) * 0.2;
-            } else {
-                this.L_Thigh.rotation.x = 0.5; this.L_Shin.rotation.x = 1.0;
-                this.R_Thigh.rotation.x = 0.2; this.R_Shin.rotation.x = 0.5;
-                this.L_Arm.rotation.x = -0.5; this.R_Arm.rotation.x = -0.5;
+                this.R_Forearm.rotation.x = -1.0 - Math.abs(Math.sin(t + Math.PI)) * 0.5;
             }
-
-            const isEth = this.isEthereal;
-            this.container.traverse(obj => {
-                if (obj.isMesh && obj.material) {
-                    obj.material.wireframe = isEth;
-                    obj.material.transparent = isEth;
-                    obj.material.opacity = isEth ? 0.3 : 1.0;
-                }
-            });
         }
 
-        move(d) { this.lane = Math.max(-1, Math.min(1, this.lane+d)); this.targetX = this.lane * CONF.laneWidth; }
+        move(d) { 
+            this.lane = Math.max(-1, Math.min(1, this.lane+d)); 
+            this.targetX = this.lane * CONF.laneWidth; 
+        }
+        
         jump() { 
             if(this.jumpCount < 2) { 
                 this.vy = CONF.jumpForce; this.jumpCount++; 
-                this.flipStyle = Math.floor(Math.random() * 3);
+                this.flipType = Math.random() > 0.5 ? 'front' : 'side';
                 AudioSys.playJump(); 
             } 
         }
+        
         toggle() { 
             this.isEthereal = !this.isEthereal; AudioSys.playShift(); 
-            // Spawn Phase Effect
-            particles.push(new PhaseEffect(this.container.position, this.isEthereal ? 0x00ffff : 0xff0044));
-            
+            this.updateAppearance();
+            particles.push(new PhaseEffect(this.container.position, this.isEthereal ? 0xff0044 : 0x00ffff));
             const el = document.getElementById('mode-indicator');
             el.innerText = this.isEthereal ? "ETHEREAL" : "SOLID";
             el.className = this.isEthereal ? "mode-ethereal" : "mode-solid";
@@ -689,6 +911,7 @@
     // --- World Objects ---
     const world = {
         obstacles: [],
+        collectibles: [],
         spawnObstacle: function(z, lane, y) {
             const x = lane * CONF.laneWidth;
             const type = Math.random();
@@ -696,148 +919,260 @@
             grp.position.set(x, y, z);
             grp.userData = { type: 'none', active: true };
 
-            // Full Height Obstacles (Ceiling connected)
-            const CEIL_HEIGHT = 15; // Arbitrary high value to "connect" visuals
+            const CEIL_HEIGHT = 20; 
 
             if(type < 0.5) { 
                 grp.userData.type = 'laser';
                 const mat = new THREE.MeshBasicMaterial({color: CONF.colors.laser});
-                // Tall Lasers
-                for(let k=0; k<8; k++) {
+                for(let k=0; k<12; k++) {
                     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,3.8), mat);
-                    b.rotation.z = Math.PI/2; b.position.y = 1 + k*0.8; grp.add(b);
+                    b.rotation.z = Math.PI/2; b.position.y = 1 + k*0.6; grp.add(b);
                 }
-                const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, CEIL_HEIGHT, 0.2), new THREE.MeshStandardMaterial({color:0x333333}));
-                p.position.set(-1.9, CEIL_HEIGHT/2, 0); grp.add(p);
-                const p2 = p.clone(); p2.position.set(1.9, CEIL_HEIGHT/2, 0); grp.add(p2);
+                
+                // WIDENED POSTS (Grey things fixed)
+                const postColor = 0x050505; // Almost black, blends in
+                const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, CEIL_HEIGHT, 0.3), new THREE.MeshStandardMaterial({color: postColor}));
+                p.position.set(-3.5, CEIL_HEIGHT/2, 0); // Moved out from 2.5
+                grp.add(p);
+                const p2 = p.clone(); p2.position.set(3.5, CEIL_HEIGHT/2, 0); // Moved out from 2.5
+                grp.add(p2);
             } else { 
                 grp.userData.type = 'glass';
-                const mat = new THREE.MeshPhysicalMaterial({color: 0xffffff, transmission: 0.9, thickness: 0.5});
-                // Tall Glass
-                const g = new THREE.Mesh(new THREE.BoxGeometry(3.5, CEIL_HEIGHT, 0.2), mat);
-                g.position.y = CEIL_HEIGHT/2; grp.add(g);
-                const f = new THREE.Mesh(new THREE.BoxGeometry(3.6, CEIL_HEIGHT, 0.1), new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true}));
-                f.position.y = CEIL_HEIGHT/2; grp.add(f);
+                const mat = new THREE.MeshPhysicalMaterial({color: 0xffffff, transmission: 0.9, thickness: 1.0, roughness: 0.0, metalness: 0.1 });
+                const glass = new THREE.Mesh(new THREE.BoxGeometry(6.5, CEIL_HEIGHT, 0.2), mat); // Wider Glass
+                glass.position.y = CEIL_HEIGHT/2;
+                grp.add(glass);
+                const frameGeo = new THREE.BoxGeometry(6.7, CEIL_HEIGHT, 0.4); // Wider Frame
+                const frame = new THREE.Mesh(frameGeo, new THREE.MeshBasicMaterial({color: 0x00ffff, wireframe: true}));
+                frame.position.y = CEIL_HEIGHT/2;
+                grp.add(frame);
             }
+
             scene.add(grp);
             this.obstacles.push(grp);
         },
-        update: function(pz) {
-            for(let i=this.obstacles.length-1; i>=0; i--) {
-                if(this.obstacles[i].position.z > pz + 20) {
-                    scene.remove(this.obstacles[i]);
+        spawnCollectible: function(z, x, y) {
+            const grp = new THREE.Group();
+            grp.position.set(x, y, z);
+            grp.rotation.z = Math.PI / 4;
+            grp.userData = { type: 'collectible', active: true };
+            
+            const geo = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: CONF.colors.glowStick });
+            const mesh = new THREE.Mesh(geo, mat);
+            grp.add(mesh);
+            
+            const light = new THREE.PointLight(CONF.colors.glowStick, 1, 5);
+            grp.add(light);
+            
+            scene.add(grp);
+            this.collectibles.push(grp);
+        },
+        update: function(playerZ) {
+            for(let i = this.obstacles.length - 1; i >= 0; i--) {
+                const ob = this.obstacles[i];
+                if(ob.position.z > playerZ + 20) {
+                    scene.remove(ob);
                     this.obstacles.splice(i, 1);
+                }
+            }
+            for(let i = this.collectibles.length - 1; i >= 0; i--) {
+                const c = this.collectibles[i];
+                c.rotation.y += 0.05;
+                c.rotation.z += 0.02;
+                if(c.position.z > playerZ + 20) {
+                    scene.remove(c);
+                    this.collectibles.splice(i, 1);
                 }
             }
         },
         reset: function() {
             this.obstacles.forEach(o => scene.remove(o));
+            this.collectibles.forEach(c => scene.remove(c));
             this.obstacles = [];
+            this.collectibles = [];
         }
     };
 
-    // --- Main ---
-    let chunkManager, env, player;
+    // --- Main Systems ---
+    let chunkManager;
+    let env;
+    let player;
 
     function init() {
         scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(CONF.colors.bg, 0.015);
-        
-        camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 300);
-        camera.position.set(0, 5, 10);
-        
-        renderer = new THREE.WebGLRenderer({antialias: true});
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('game-container').appendChild(renderer.domElement);
+        scene.background = new THREE.Color(CONF.colors.bg);
 
-        const ambi = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambi);
-        const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(10, 50, 20); scene.add(dir);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 300);
+        camera.position.set(0, 5, 10);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        document.getElementById('game-container').appendChild(renderer.domElement);
 
         chunkManager = new ChunkManager();
         env = new Environment();
-        player = new Player();
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth/window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        for(let i=0; i<15; i++) {
+            speedLines.push(new SpeedLine());
+        }
 
-        document.addEventListener('keydown', e => {
-            if(!gameActive) { if(e.code==='Space') startGame(); return; }
-            if(e.code==='ArrowLeft'||e.code==='KeyA') player.move(-1);
-            if(e.code==='ArrowRight'||e.code==='KeyD') player.move(1);
-            if(e.code==='ArrowUp'||e.code==='KeyW'||e.code==='Space') player.jump();
-            if(e.code==='ArrowDown'||e.code==='KeyS') player.toggle();
-        });
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.6);
+        scene.add(hemiLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
 
-        animate();
+        AudioSys.init();
+
+        document.addEventListener('keydown', handleInput);
+        window.addEventListener('resize', onResize);
+
+        requestAnimationFrame(animate);
     }
 
     function startGame() {
-        AudioSys.init(); AudioSys.resume();
+        if(gameActive) return;
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-over-screen').classList.add('hidden');
-        chunkManager.reset(); world.reset();
-        player.container.position.set(0,2,0);
-        player.vy = 0; player.lane = 0; player.targetX = 0;
-        score = 0; speed = CONF.speed; gameActive = true; 
+        document.getElementById('ui-layer').classList.remove('hidden');
+        
+        AudioSys.resume();
+        score = 0;
+        currency = 0;
+        speed = CONF.speed;
+        chunkManager.reset();
+        world.reset();
+        
+        if(player) scene.remove(player.container);
+        player = new Player();
+        
+        gameActive = true;
     }
 
     function gameOver() {
-        gameActive = false; AudioSys.playCrash();
-        document.getElementById('final-score').innerText = Math.floor(score);
+        gameActive = false;
+        AudioSys.playCrash();
+        document.getElementById('final-score').innerText = Math.floor(score) + " (GLOW: " + currency + ")";
         document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+
+    function handleInput(e) {
+        if (e.code === 'Space') {
+            if(!gameActive) {
+                if(!document.getElementById('game-over-screen').classList.contains('hidden')) startGame();
+                else if(!document.getElementById('start-screen').classList.contains('hidden')) startGame();
+                else player.jump();
+            } else {
+                player.jump();
+            }
+        }
+        if(!gameActive) return;
+
+        if (e.code === 'ArrowLeft') player.move(-1);
+        if (e.code === 'ArrowRight') player.move(1);
+        if (e.code === 'ArrowDown') player.toggle();
+    }
+
+    function checkCollisions() {
+        const pBox = new THREE.Box3().setFromObject(player.hips);
+        pBox.expandByScalar(-0.2);
+
+        for(let ob of world.obstacles) {
+            if(ob.position.z < player.container.position.z - 2 || ob.position.z > player.container.position.z + 2) continue;
+            const obBox = new THREE.Box3().setFromObject(ob);
+            if(pBox.intersectsBox(obBox)) {
+                const type = ob.userData.type;
+                let survive = false;
+                if (type === 'laser') {
+                    if (player.isEthereal) survive = true;
+                } else if (type === 'glass') {
+                    if (!player.isEthereal) {
+                        survive = true;
+                        particles.push(new PhaseEffect(ob.position, 0x00ffff));
+                        scene.remove(ob);
+                        world.obstacles = world.obstacles.filter(o => o !== ob);
+                        AudioSys.playShift(); 
+                    }
+                }
+                if (!survive) gameOver();
+            }
+        }
+
+        const pSphere = new THREE.Sphere(player.container.position.clone(), 1.5);
+        pSphere.center.y += 1;
+        
+        for(let i = world.collectibles.length - 1; i >= 0; i--) {
+            const c = world.collectibles[i];
+            if(c.position.distanceTo(pSphere.center) < 2.0) {
+                 currency += 10;
+                 document.getElementById('currency-display').innerText = "GLOW: " + currency;
+                 scene.remove(c);
+                 world.collectibles.splice(i, 1);
+                 AudioSys.playCollect();
+                 particles.push(new PhaseEffect(c.position, 0xffff00));
+            }
+        }
+    }
+
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function animate() {
         requestAnimationFrame(animate);
-        timeGlobal += 0.016;
+        const dt = 0.016; 
+        timeGlobal += dt;
 
         if(gameActive) {
-            speed += 0.0001; 
-            player.container.position.z -= speed;
-            player.update(0.016);
-            chunkManager.update(player.container.position.z);
-            env.update(player.container.position.z);
-            world.update(player.container.position.z);
-
-            // Update Particles
-            for(let i = particles.length-1; i>=0; i--) {
-                particles[i].update();
-                if(!particles[i].active) {
-                    particles.splice(i, 1);
-                }
-            }
-
-            for(let o of world.obstacles) {
-                if(!o.userData.active) continue;
-                const dz = Math.abs(o.position.z - player.container.position.z);
-                const dx = Math.abs(o.position.x - player.container.position.x);
-                // Simple infinite height check since obstacles connect to ceiling
-                if(dx < 1.0 && dz < 1.0) {
-                    if(o.userData.type === 'glass') {
-                        if(player.isEthereal) gameOver();
-                        else { o.userData.active=false; o.visible=false; AudioSys.playCrash(); score+=50; }
-                    } else if(o.userData.type === 'laser') {
-                        if(!player.isEthereal) gameOver();
-                        else AudioSys.playShift();
-                    }
-                }
-            }
-            if(player.container.position.y < -20) gameOver();
-
-            camera.position.z = player.container.position.z + 8;
-            camera.position.y += (player.container.position.y + 4 - camera.position.y) * 0.1;
-            
+            speed += 0.0001;
             score += speed;
-            document.getElementById('score-display').innerText = "SCORE: " + Math.floor(score);
-            document.getElementById('speed-display').innerText = "VEL: " + Math.floor(speed*100);
+            document.getElementById('score-display').innerText = 'SCORE: ' + Math.floor(score).toString().padStart(4, '0');
+            document.getElementById('speed-display').innerText = 'VELOCITY: ' + Math.floor((speed/CONF.speed)*100) + '%';
+
+            player.container.position.z -= speed;
+            player.update(dt);
+
+            camera.position.z = player.container.position.z + 14;
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, player.container.position.y + 4, 0.1);
+            
+            const targetCamX = player.container.position.x * 0.7;
+            camera.position.x += (targetCamX - camera.position.x) * 0.1;
+            
+            camera.lookAt(player.container.position.x * 0.3, player.container.position.y, player.container.position.z - 15);
+            
+            const targetTilt = -player.container.position.x * 0.05;
+            camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, targetTilt, 0.1);
+
+            chunkManager.update(player.container.position.z);
+            world.update(player.container.position.z);
+            env.update(player.container.position.z);
+            
+            speedLines.forEach(sl => sl.update(player.container.position.z));
+            
+            checkCollisions();
+        } else {
+             if(!player && camera) {
+                 camera.position.x = Math.sin(timeGlobal * 0.2) * 5;
+                 camera.lookAt(0,0,-20);
+             }
         }
+
+        for(let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            if(!particles[i].active) particles.splice(i, 1);
+        }
+
         renderer.render(scene, camera);
     }
 
     init();
+
 </script>
 </body>
 </html>
